@@ -1,0 +1,64 @@
+version: '3.5'
+
+networks:
+  demkit_network:
+    external: true
+
+services:
+  traefik:
+    image: traefik:v2.5
+    networks:
+      - demkit_network
+    command:
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      - "8080:8080"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik.yml:/traefik.yml
+      - ./letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+  demkit_influxdb:
+    container_name: influxdb
+    image: influxdb:1.8.9
+    restart: always
+    networks:
+      - demkit_network  
+    ports:
+      - "8086:8086"
+    volumes:
+     - "./docker/influxdb:/var/lib/influxdb"
+
+  grafana_latest:
+    container_name: grafana_latest
+    image: grafana/grafana:latest
+    restart: always
+    networks:
+      - demkit_network  
+    ports:
+      - "3000:3000"
+    volumes:
+      - "./docker/grafana_latest/lib:/var/lib/grafana"
+    depends_on:
+      - demkit_influxdb
+
+  myflaskapp:
+    image: myflaskapp
+    networks:
+      - demkit_network
+    ports:
+        - "5000:5000"
+    labels:
+      - "traefik.port: 5000"
+      - "traefik.enable=true"
+      - "traefik.http.routers.myflaskapp.rule=Host(`myapp.edric-domain.nl`)"  # Replace with your desired domain
+      - "traefik.http.routers.myflaskapp.entrypoints=http"
+      - "traefik.http.middlewares.myflaskapp-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.myflaskapp.middlewares=myflaskapp-https-redirect"
+      - "traefik.http.routers.myflaskapp-secure.rule=Host(`myapp.edric-domain.nl`)"  # Replace with your desired domain
+      - "traefik.http.routers.myflaskapp-secure.entrypoints=https"
+      - "traefik.http.routers.myflaskapp-secure.tls=true"
+      - "traefik.http.routers.myflaskapp-secure.tls.certresolver=letsencrypt"
